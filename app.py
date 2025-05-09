@@ -4,6 +4,8 @@ import pandas as pd
 import os
 from datetime import datetime
 from pytrends.request import TrendReq
+from pytrends.exceptions import TooManyRequestsError
+import time
 
 st.set_page_config(page_title="Crypto Cycle Top Indicator", layout="wide")
 st.title("🧠 Crypto Cycle Top Indicator")
@@ -69,15 +71,20 @@ else:
 # -------------------------------
 # 4. Google Trends - "Bitcoin"
 # -------------------------------
-@st.cache_data
+@st.cache_data(ttl=86400)  # Cache data for 24 hours
 def get_google_trends_score():
     pytrends = TrendReq()
     pytrends.build_payload(["Bitcoin"], timeframe='now 7-d')
-    data = pytrends.interest_over_time()
-    if not data.empty:
-        avg_score = data["Bitcoin"].mean()
-        return avg_score
-    return None
+    
+    try:
+        data = pytrends.interest_over_time()
+        if not data.empty:
+            avg_score = data["Bitcoin"].mean()
+            return avg_score
+        return None
+    except TooManyRequestsError:
+        st.error("Too many requests to Google Trends. Please wait a few minutes and try again.")
+        return None
 
 gtrend_score = get_google_trends_score()
 if gtrend_score:
@@ -212,4 +219,3 @@ else:
     st.info("No historical data yet. Come back after the app has run a few times.")
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built by You + ChatGPT")
-
