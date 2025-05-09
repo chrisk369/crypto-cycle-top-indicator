@@ -82,7 +82,7 @@ else:
 @st.cache_data
 def get_btc_price_history():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
-    params = {"vs_currency": "usd", "days": "max"}
+    params = {"vs_currency": "usd", "days": "365"}  # Changed from 'max' to 365
     headers = {
         "accept": "application/json"
     }
