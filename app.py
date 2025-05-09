@@ -124,6 +124,12 @@ if pi_signal is not None:
     else:
         st.success("🟢 Pi Cycle Top Signal: Inactive")
 
+# Pi Cycle Chart
+if pi_df is not None:
+    st.markdown("### 📊 Pi Cycle Chart (Last 500 Days)")
+    chart_df = pi_df[["price", "111ema", "2x_350sma"]].tail(500).dropna()  # Take the last 500 rows and remove NaN values
+    st.line_chart(chart_df)
+
 # -------------------------------
 # 6. Refined Cycle Score Calculation
 # -------------------------------
@@ -181,12 +187,6 @@ if os.path.exists(DATA_FILE):
     st.line_chart(df.set_index("timestamp")["score"])
 else:
     st.info("No historical data yet. Come back after the app has run a few times.")
-
-# Optional: Pi Cycle Chart
-if pi_df is not None:
-    st.markdown("### 📊 Pi Cycle Chart (500-day preview)")
-    chart_df = pi_df[["price", "111ema", "2x_350sma"]].dropna().tail(500)
-    st.line_chart(chart_df)
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built by You + ChatGPT")
 
