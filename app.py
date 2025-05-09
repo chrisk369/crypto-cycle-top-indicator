@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 from pytrends.request import TrendReq
 from pytrends.exceptions import TooManyRequestsError
+import time
 
 st.set_page_config(page_title="Crypto Cycle Top Indicator", layout="wide")
 st.title("🧠 Crypto Cycle Top Indicator")
@@ -20,7 +21,9 @@ def get_btc_price():
     response = requests.get(url, params=params, headers=headers)
     if response.status_code == 200:
         return response.json()["bitcoin"]["usd"]
-    return None
+    else:
+        st.error(f"Error fetching data: {response.status_code}")
+        return None
 
 btc_price = get_btc_price()
 if btc_price:
@@ -212,5 +215,4 @@ else:
     st.info("No historical data yet. Come back after the app has run a few times.")
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built by You + ChatGPT")
-
 
