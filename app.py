@@ -15,19 +15,10 @@ st.caption("Combining sentiment, price, and on-chain signals to spot potential c
 # 1. Bitcoin Price (CoinGecko)
 # -------------------------------
 @st.cache_data
-@st.cache_data
 def get_btc_price():
     url = "https://api.coingecko.com/api/v3/simple/price"
     params = {"ids": "bitcoin", "vs_currencies": "usd"}
     headers = {"User-Agent": "Mozilla/5.0"}  # Basic header to avoid some rejections
-    response = requests.get(url, params=params, headers=headers)
-    if response.status_code == 200:
-        return response.json()["bitcoin"]["usd"]
-    else:
-        st.error(f"🔒 Unauthorized ({response.status_code}). CoinGecko may be rejecting the request.")
-        return None
-
-    }
     response = requests.get(url, params=params, headers=headers)
     if response.status_code == 200:
         return response.json()["bitcoin"]["usd"]
@@ -93,8 +84,7 @@ def get_btc_price_history():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
     params = {"vs_currency": "usd", "days": "max"}
     headers = {
-        "accept": "application/json",
-        "x-cg-pro-api-key": st.secrets["COINGECKO_API_KEY"]
+        "accept": "application/json"
     }
 
     retries = 3
