@@ -1,4 +1,2 @@
-streamlit
-requests
-pandas
-pytrends
+pip install streamlit requests pandas pytrends talib numpy
+
