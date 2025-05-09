@@ -161,10 +161,11 @@ def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_value):
             score += 10
         elif dominance < 45:
             score += 5
-    if pi_active:
+    if pi_active is not None:  # Make sure pi_signal is not None
         score += 15
-    if pi_value > 10:  # If the Pi Value is significant
-        score += pi_value * 0.1
+    if pi_value is not None:  # Check that pi_value is valid
+        if pi_value > 10:  # If the Pi Value is significant
+            score += pi_value * 0.1
     return int(min(score, 100))
 
 score = calculate_cycle_score(btc_price, fear_val, gtrend_score, btc_dominance, pi_signal, pi_value)
