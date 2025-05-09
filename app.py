@@ -5,6 +5,7 @@ from datetime import datetime
 from pytrends.request import TrendReq
 from pytrends.exceptions import TooManyRequestsError
 import time
+import os
 
 st.set_page_config(page_title="Crypto Cycle Top Indicator", layout="wide")
 st.title("🧠 Crypto Cycle Top Indicator")
@@ -176,7 +177,11 @@ def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_value):
             score += pi_value * 0.1
     return int(min(score, 100))
 
-score = calculate_cycle_score(btc_price, fear_val, gtrend_score, btc_dominance, pi_signal, pi_value)
+# Make sure we handle None values for Pi Cycle
+pi_signal = pi_signal if pi_signal is not None else False
+pi_value = pi_value if pi_value is not None else 0
+
+score = calculate_cycle_score(btc_price, fear_val, gtrend_score, 60.52, pi_signal, pi_value)
 
 st.subheader("🧮 Cycle Top Score")
 st.markdown(f"### **{score}/100**")
@@ -215,4 +220,3 @@ else:
     st.info("No historical data yet. Come back after the app has run a few times.")
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built by You + ChatGPT")
-
