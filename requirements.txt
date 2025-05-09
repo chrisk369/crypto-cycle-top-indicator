@@ -1,5 +1,5 @@
-streamlit==1.13.0
-requests==2.26.0
-pandas==1.3.3
-pytrends==4.7.3
-# TA-Lib==0.4.0
+streamlit
+requests
+pandas
+pytrends
+numpy
