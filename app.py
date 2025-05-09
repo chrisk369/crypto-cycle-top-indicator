@@ -55,7 +55,7 @@ else:
 # -------------------------------
 # 3. Google Trends - "Bitcoin"
 # -------------------------------
-@st.cache_data(ttl=86400)  # Cache data for 24 hours
+@st.cache_data(ttl=86400)
 def get_google_trends_score():
     pytrends = TrendReq()
     pytrends.build_payload(["Bitcoin"], timeframe='now 7-d')
@@ -68,8 +68,8 @@ def get_google_trends_score():
         return None
     except TooManyRequestsError:
         st.error("Too many requests to Google Trends. Please wait a few minutes and try again.")
-        time.sleep(60)  # Adding delay before retrying
-        return get_google_trends_score()  # Retry fetching the data
+        time.sleep(60)
+        return get_google_trends_score()
 
 gtrend_score = get_google_trends_score()
 if gtrend_score:
@@ -78,13 +78,13 @@ else:
     st.warning("Google Trends data not available.")
 
 # -------------------------------
-# 5. Pi Cycle Indicator with Value
+# 5. Pi Cycle Indicator
 # -------------------------------
 @st.cache_data
 def get_btc_price_history():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
     params = {"vs_currency": "usd", "days": "max"}
-    retries = 3  # Retry 3 times if there is an error
+    retries = 3
     for _ in range(retries):
         response = requests.get(url, params=params)
         if response.status_code == 200:
@@ -96,7 +96,7 @@ def get_btc_price_history():
             return df[["price"]]
         else:
             st.error(f"Error fetching data: {response.status_code}")
-            time.sleep(5)  # Wait for 5 seconds before retrying
+            time.sleep(5)
     return None
 
 def compute_pi_cycle(df):
@@ -106,7 +106,7 @@ def compute_pi_cycle(df):
 
     df["111ema"] = df["price"].ewm(span=111, adjust=False).mean()
     df["350sma"] = df["price"].rolling(window=350).mean()
-    df["2x_350sma"] = df["350sma"] * 2  # Fixed the syntax error here
+    df["2x_350sma"] = df["350sma"] * 2
     df["pi_signal"] = df["111ema"] > df["2x_350sma"]
     df["pi_value"] = (df["111ema"] - df["2x_350sma"]) / df["2x_350sma"] * 100
     df["pi_value"] = df["pi_value"].clip(lower=0)
@@ -121,7 +121,7 @@ def get_pi_cycle_signal():
         value = latest["pi_value"]
         return signal, value, df
     else:
-        st.warning("Pi Cycle data is unavailable. Check Bitcoin price history data.")
+        st.warning("Pi Cycle data is unavailable.")
         return None, None, None
 
 def categorize_pi_cycle_value(value):
@@ -136,14 +136,13 @@ def categorize_pi_cycle_value(value):
     else:
         return "🔴 Very Close Warning"
 
-# Pi Cycle Signal & Value Display
+# Pi Cycle Signal
 pi_signal, pi_value, pi_df = get_pi_cycle_signal()
 if pi_signal is not None:
     pi_category = categorize_pi_cycle_value(pi_value)
     st.markdown("### 🟣 Pi Cycle Indicator")
     st.markdown(f"#### Pi Cycle Signal: {pi_category} (Pi Value: {pi_value:.2f})")
 
-    # Pi Cycle Chart with Pi Value
     st.markdown("### 📊 Pi Cycle Chart (Last 500 Days)")
     if pi_df is not None:
         chart_df = pi_df[["price", "111ema", "2x_350sma", "pi_value"]].tail(500).dropna()
@@ -152,7 +151,7 @@ else:
     st.warning("Pi Cycle data not available. Try again later.")
 
 # -------------------------------
-# 6. Refined Cycle Score Calculation
+# 6. Refined Cycle Score
 # -------------------------------
 def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_value):
     score = 0
@@ -167,14 +166,13 @@ def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_value):
             score += 10
         elif dominance < 45:
             score += 5
-    if pi_active is not None:  # Make sure pi_signal is not None
+    if pi_active is not None:
         score += 15
-    if pi_value is not None:  # Check that pi_value is valid
-        if pi_value > 10:  # If the Pi Value is significant
+    if pi_value is not None:
+        if pi_value > 10:
             score += pi_value * 0.1
     return int(min(score, 100))
 
-# Make sure we handle None values for Pi Cycle
 pi_signal = pi_signal if pi_signal is not None else False
 pi_value = pi_value if pi_value is not None else 0
 
@@ -199,8 +197,14 @@ def save_score_history(score):
     new_entry = pd.DataFrame([[now, score]], columns=["timestamp", "score"])
 
     if os.path.exists(DATA_FILE):
-        df = pd.read_csv(DATA_FILE)
-        df = pd.concat([df, new_entry], ignore_index=True)
+        try:
+            if os.path.getsize(DATA_FILE) > 0:
+                df = pd.read_csv(DATA_FILE)
+                df = pd.concat([df, new_entry], ignore_index=True)
+            else:
+                df = new_entry
+        except pd.errors.EmptyDataError:
+            df = new_entry
     else:
         df = new_entry
 
@@ -209,11 +213,15 @@ def save_score_history(score):
 save_score_history(score)
 
 st.markdown("### 📈 Score History")
-if os.path.exists(DATA_FILE):
-    df = pd.read_csv(DATA_FILE)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    st.line_chart(df.set_index("timestamp")["score"])
+if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
+    try:
+        df = pd.read_csv(DATA_FILE)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        st.line_chart(df.set_index("timestamp")["score"])
+    except pd.errors.EmptyDataError:
+        st.info("Score history file exists but is empty or unreadable.")
 else:
     st.info("No historical data yet. Come back after the app has run a few times.")
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built with Streamlit")
+
