@@ -128,7 +128,9 @@ def get_pi_cycle_signal():
         signal = latest["pi_signal"]
         value = latest["pi_value"]
         return signal, value, df
-    return None, None, None
+    else:
+        st.warning("Pi Cycle data is unavailable. Check Bitcoin price history data.")
+        return None, None, None
 
 def categorize_pi_cycle_value(value):
     if value > 20:
