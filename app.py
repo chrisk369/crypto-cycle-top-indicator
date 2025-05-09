@@ -12,8 +12,7 @@ def get_btc_price():
     url = "https://api.coingecko.com/api/v3/simple/price"
     params = {"ids": "bitcoin", "vs_currencies": "usd"}
     headers = {"User-Agent": "Mozilla/5.0"}
-response = requests.get(url, params=params, headers=headers)
-
+    response = requests.get(url, params=params, headers=headers)
     if response.status_code == 200:
         return response.json()["bitcoin"]["usd"]
     return None
@@ -22,7 +21,7 @@ btc_price = get_btc_price()
 if btc_price:
     st.metric(label="Bitcoin Price (USD)", value=f"${btc_price:,.2f}")
 else:
-    st.error("Failed to load BTC price.")
+    st.error("❌ Failed to load Bitcoin price")
 
 # -------------------------------
 # 2. Fear & Greed Index
@@ -41,17 +40,17 @@ fear_val, sentiment = get_fear_greed()
 if fear_val:
     st.metric("Fear & Greed Index", value=fear_val, delta=sentiment)
 else:
-    st.error("Fear & Greed Index unavailable.")
+    st.error("❌ Fear & Greed Index unavailable")
 
 # -------------------------------
-# 3. Combined Cycle Score (price + sentiment only)
+# 3. Combined Cycle Score
 # -------------------------------
 def calculate_cycle_score(price, fear_greed):
     score = 0
     if price:
-        score += min(price / 1000, 40)  # normalize BTC price
+        score += min(price / 1000, 40)  # Normalize BTC price
     if fear_greed:
-        score += fear_greed * 0.4       # weight for sentiment
+        score += fear_greed * 0.4       # Weight for sentiment
     return int(min(score, 100))
 
 score = calculate_cycle_score(btc_price, fear_val)
