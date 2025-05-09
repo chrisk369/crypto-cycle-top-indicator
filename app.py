@@ -1,11 +1,9 @@
 import streamlit as st
 import requests
 import pandas as pd
-import os
 from datetime import datetime
 from pytrends.request import TrendReq
 from pytrends.exceptions import TooManyRequestsError
-import time
 
 st.set_page_config(page_title="Crypto Cycle Top Indicator", layout="wide")
 st.title("🧠 Crypto Cycle Top Indicator")
@@ -51,25 +49,7 @@ else:
     st.error("❌ Fear & Greed Index unavailable")
 
 # -------------------------------
-# 3. BTC Dominance (CoinGecko)
-# -------------------------------
-@st.cache_data
-def get_btc_dominance():
-    url = "https://api.coingecko.com/api/v3/global"
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        return data["data"]["market_cap_percentage"]["btc"]
-    return None
-
-btc_dominance = get_btc_dominance()
-if btc_dominance:
-    st.metric("BTC Dominance", value=f"{btc_dominance:.2f}%")
-else:
-    st.error("❌ BTC dominance unavailable")
-
-# -------------------------------
-# 4. Google Trends - "Bitcoin"
+# 3. Google Trends - "Bitcoin"
 # -------------------------------
 @st.cache_data(ttl=86400)  # Cache data for 24 hours
 def get_google_trends_score():
@@ -102,14 +82,25 @@ def get_btc_price_history():
     response = requests.get(url, params=params)
     if response.status_code == 200:
         prices = response.json()["prices"]
-        df = pd.DataFrame(prices, columns=["timestamp", "price"])
-        df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
-        df.set_index("date", inplace=True)
-        df["price"] = df["price"].astype(float)
-        return df[["price"]]
-    return None
+        if len(prices) > 0:
+            df = pd.DataFrame(prices, columns=["timestamp", "price"])
+            df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
+            df.set_index("date", inplace=True)
+            df["price"] = df["price"].astype(float)
+            return df[["price"]]
+        else:
+            st.warning("No price data returned from CoinGecko.")
+            return None
+    else:
+        st.error(f"Error fetching data: {response.status_code}")
+        return None
 
 def compute_pi_cycle(df):
+    # Check if the dataframe has enough data
+    if df is None or len(df) < 350:
+        st.warning("Not enough data for Pi Cycle calculation.")
+        return df
+
     df["111ema"] = df["price"].ewm(span=111, adjust=False).mean()
     df["350sma"] = df["price"].rolling(window=350).mean()
     df["2x_350sma"] = df["350sma"] * 2
@@ -221,4 +212,5 @@ else:
     st.info("No historical data yet. Come back after the app has run a few times.")
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built by You + ChatGPT")
+
 
