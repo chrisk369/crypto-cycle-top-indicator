@@ -12,7 +12,7 @@ st.caption("Combining sentiment, price, and on-chain signals to spot potential c
 # -------------------------------
 # 1. Bitcoin Price (CoinGecko)
 # -------------------------------
-@st.cache(ttl=300)
+@st.cache_data
 def get_btc_price():
     url = "https://api.coingecko.com/api/v3/simple/price"
     params = {"ids": "bitcoin", "vs_currencies": "usd"}
@@ -31,13 +31,19 @@ else:
 # -------------------------------
 # 2. Fear & Greed Index
 # -------------------------------
+@st.cache_data
 def get_fear_greed():
     url = "https://api.alternative.me/fng/"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
-        value = int
+        value = int(data["data"][0]["value"])
+        sentiment = data["data"][0]["value_classification"]
+        return value, sentiment
+    return None, None
 
-
+fear_val, sentiment = get_fear_greed()
+if fear_val:
+    st.metric("Fear
 
 
