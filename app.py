@@ -8,7 +8,7 @@ import time
 import os
 
 st.set_page_config(page_title="Crypto Cycle Top Indicator", layout="wide")
-st.title("🧠 Crypto Cycle Top Indicator")
+st.title("\U0001F9E0 Crypto Cycle Top Indicator")
 st.caption("Combining sentiment, price, and on-chain signals to spot potential cycle tops")
 
 # -------------------------------
@@ -59,7 +59,6 @@ else:
 def get_google_trends_score():
     pytrends = TrendReq()
     pytrends.build_payload(["Bitcoin"], timeframe='now 7-d')
-    
     try:
         data = pytrends.interest_over_time()
         if not data.empty:
@@ -80,23 +79,42 @@ else:
 # -------------------------------
 # 5. Pi Cycle Indicator
 # -------------------------------
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_btc_price_history():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
     params = {"vs_currency": "usd", "days": "max"}
+    headers = {"User-Agent": "Mozilla/5.0"}
     retries = 3
-    for _ in range(retries):
-        response = requests.get(url, params=params)
+    delay = 5
+
+    for attempt in range(retries):
+        response = requests.get(url, params=params, headers=headers)
+
         if response.status_code == 200:
-            prices = response.json()["prices"]
-            df = pd.DataFrame(prices, columns=["timestamp", "price"])
-            df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
-            df.set_index("date", inplace=True)
-            df["price"] = df["price"].astype(float)
-            return df[["price"]]
+            try:
+                prices = response.json()["prices"]
+                df = pd.DataFrame(prices, columns=["timestamp", "price"])
+                df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
+                df.set_index("date", inplace=True)
+                df["price"] = df["price"].astype(float)
+                return df[["price"]]
+            except Exception as e:
+                st.error(f"❌ Failed to parse CoinGecko data: {e}")
+                return None
+
+        elif response.status_code == 429:
+            st.warning("⏳ Rate limit hit (429). Retrying after delay...")
+            time.sleep(delay)
+            delay *= 2
+
+        elif response.status_code == 401:
+            st.error("🔒 Unauthorized (401). CoinGecko may be rejecting the request.")
+            break
+
         else:
-            st.error(f"Error fetching data: {response.status_code}")
-            time.sleep(5)
+            st.error(f"❌ Error fetching data from CoinGecko: {response.status_code}")
+            break
+
     return None
 
 def compute_pi_cycle(df):
@@ -117,11 +135,9 @@ def get_pi_cycle_signal():
     if df is not None:
         df = compute_pi_cycle(df)
         latest = df.iloc[-1]
-        signal = latest["pi_signal"]
-        value = latest["pi_value"]
-        return signal, value, df
+        return latest["pi_signal"], latest["pi_value"], df
     else:
-        st.warning("Pi Cycle data is unavailable.")
+        st.warning("Pi Cycle data is unavailable. Check Bitcoin price history data.")
         return None, None, None
 
 def categorize_pi_cycle_value(value):
@@ -136,7 +152,6 @@ def categorize_pi_cycle_value(value):
     else:
         return "🔴 Very Close Warning"
 
-# Pi Cycle Signal
 pi_signal, pi_value, pi_df = get_pi_cycle_signal()
 if pi_signal is not None:
     pi_category = categorize_pi_cycle_value(pi_value)
@@ -151,7 +166,7 @@ else:
     st.warning("Pi Cycle data not available. Try again later.")
 
 # -------------------------------
-# 6. Refined Cycle Score
+# 6. Refined Cycle Score Calculation
 # -------------------------------
 def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_value):
     score = 0
@@ -197,14 +212,8 @@ def save_score_history(score):
     new_entry = pd.DataFrame([[now, score]], columns=["timestamp", "score"])
 
     if os.path.exists(DATA_FILE):
-        try:
-            if os.path.getsize(DATA_FILE) > 0:
-                df = pd.read_csv(DATA_FILE)
-                df = pd.concat([df, new_entry], ignore_index=True)
-            else:
-                df = new_entry
-        except pd.errors.EmptyDataError:
-            df = new_entry
+        df = pd.read_csv(DATA_FILE)
+        df = pd.concat([df, new_entry], ignore_index=True)
     else:
         df = new_entry
 
@@ -213,13 +222,10 @@ def save_score_history(score):
 save_score_history(score)
 
 st.markdown("### 📈 Score History")
-if os.path.exists(DATA_FILE) and os.path.getsize(DATA_FILE) > 0:
-    try:
-        df = pd.read_csv(DATA_FILE)
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        st.line_chart(df.set_index("timestamp")["score"])
-    except pd.errors.EmptyDataError:
-        st.info("Score history file exists but is empty or unreadable.")
+if os.path.exists(DATA_FILE):
+    df = pd.read_csv(DATA_FILE)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    st.line_chart(df.set_index("timestamp")["score"])
 else:
     st.info("No historical data yet. Come back after the app has run a few times.")
 
