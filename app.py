@@ -85,7 +85,7 @@ else:
     st.warning("Google Trends data not available.")
 
 # -------------------------------
-# 5. Pi Cycle Indicator
+# 5. Pi Cycle Indicator with Value
 # -------------------------------
 @st.cache_data(ttl=86400)
 def get_btc_price_history():
@@ -106,6 +106,10 @@ def compute_pi_cycle(df):
     df["350sma"] = df["price"].rolling(window=350).mean()
     df["2x_350sma"] = df["350sma"] * 2
     df["pi_signal"] = df["111ema"] > df["2x_350sma"]
+    
+    # Adding Pi Cycle Value (quantified signal strength)
+    df["pi_value"] = (df["111ema"] - df["2x_350sma"]) / df["2x_350sma"] * 100  # Percentage difference
+    df["pi_value"] = df["pi_value"].clip(lower=0)  # Ensure value can't be negative
     return df
 
 def get_pi_cycle_signal():
@@ -114,26 +118,37 @@ def get_pi_cycle_signal():
         df = compute_pi_cycle(df)
         latest = df.iloc[-1]
         signal = latest["pi_signal"]
-        return signal, df
-    return None, None
+        value = latest["pi_value"]
+        return signal, value, df
+    return None, None, None
 
-pi_signal, pi_df = get_pi_cycle_signal()
-if pi_signal is not None:
-    if pi_signal:
-        st.error("🔴 Pi Cycle Top Signal: ACTIVE (Potential Top)")
+def categorize_pi_cycle_value(value):
+    if value > 20:
+        return "🟢 Very Far"
+    elif value > 10:
+        return "🟡 Far"
+    elif value > 0:
+        return "🟠 Neutral"
+    elif value > -5:
+        return "🟣 Close"
     else:
-        st.success("🟢 Pi Cycle Top Signal: Inactive")
+        return "🔴 Very Close Warning"
 
-# Pi Cycle Chart
+pi_signal, pi_value, pi_df = get_pi_cycle_signal()
+if pi_signal is not None:
+    pi_category = categorize_pi_cycle_value(pi_value)
+    st.markdown(f"### Pi Cycle Status: {pi_category} (Pi Value: {pi_value:.2f})")
+
+# Pi Cycle Chart with Pi Value
 if pi_df is not None:
     st.markdown("### 📊 Pi Cycle Chart (Last 500 Days)")
-    chart_df = pi_df[["price", "111ema", "2x_350sma"]].tail(500).dropna()  # Take the last 500 rows and remove NaN values
+    chart_df = pi_df[["price", "111ema", "2x_350sma", "pi_value"]].tail(500).dropna()  # Include pi_value in chart
     st.line_chart(chart_df)
 
 # -------------------------------
 # 6. Refined Cycle Score Calculation
 # -------------------------------
-def calculate_cycle_score(price, fear, trend, dominance, pi_active):
+def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_value):
     score = 0
     if price:
         score += min(price / 1000, 40)
@@ -148,9 +163,11 @@ def calculate_cycle_score(price, fear, trend, dominance, pi_active):
             score += 5
     if pi_active:
         score += 15
+    if pi_value > 10:  # If the Pi Value is significant
+        score += pi_value * 0.1
     return int(min(score, 100))
 
-score = calculate_cycle_score(btc_price, fear_val, gtrend_score, btc_dominance, pi_signal)
+score = calculate_cycle_score(btc_price, fear_val, gtrend_score, btc_dominance, pi_signal, pi_value)
 
 st.subheader("🧮 Cycle Top Score")
 st.markdown(f"### **{score}/100**")
@@ -189,5 +206,6 @@ else:
     st.info("No historical data yet. Come back after the app has run a few times.")
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built by You + ChatGPT")
+
 
 
