@@ -18,7 +18,7 @@ st.caption("Combining sentiment, price, and on-chain signals to spot potential c
 def get_btc_price():
     url = "https://api.coingecko.com/api/v3/simple/price"
     params = {"ids": "bitcoin", "vs_currencies": "usd"}
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": "Mozilla/5.0"}  # Basic header to avoid some rejections
     response = requests.get(url, params=params, headers=headers)
     if response.status_code == 200:
         return response.json()["bitcoin"]["usd"]
@@ -77,12 +77,77 @@ else:
     st.warning("Google Trends data not available.")
 
 # -------------------------------
-# Pi Cycle Indicator
-# (same Pi cycle code as above but adjusted for shorter periods if needed)
+# 4. Pi Cycle Indicator
 # -------------------------------
+@st.cache_data
+def get_btc_price_history():
+    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    params = {"vs_currency": "usd", "days": "max"}
+    headers = {
+        "accept": "application/json"
+    }
+
+    retries = 3
+    for _ in range(retries):
+        response = requests.get(url, params=params, headers=headers)
+        if response.status_code == 200 and "prices" in response.json():
+            prices = response.json()["prices"]
+            if prices:
+                df = pd.DataFrame(prices, columns=["timestamp", "price"])
+                df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
+                df.set_index("date", inplace=True)
+                df["price"] = df["price"].astype(float)
+                return df[["price"]]
+        else:
+            st.warning(f"🔁 Retry... ({response.status_code})")
+            time.sleep(5)
+    return None
+
+def compute_pi_cycle(df):
+    if df is None or len(df) < 350:
+        st.warning("📉 Not enough data for Pi Cycle calculation.")
+        return df
+
+    df["111ema"] = df["price"].ewm(span=111, adjust=False).mean()
+    df["350sma"] = df["price"].rolling(window=350).mean()
+    df["2x_350sma"] = df["350sma"] * 2
+    df["pi_signal"] = df["111ema"] > df["2x_350sma"]
+    df["pi_value"] = ((df["111ema"] - df["2x_350sma"]) / df["2x_350sma"]) * 100
+    df["pi_value"] = df["pi_value"].clip(lower=0)
+    return df
+
+def get_pi_cycle_signal():
+    df = get_btc_price_history()
+    if df is not None:
+        df = compute_pi_cycle(df)
+        latest = df.dropna().iloc[-1]
+        return latest["pi_signal"], latest["pi_value"], df
+    return None, None, None
+
+def categorize_pi_cycle_value(value):
+    if value > 20:
+        return "🟢 Very Far"
+    elif value > 10:
+        return "🟡 Far"
+    elif value > 0:
+        return "🟠 Neutral"
+    elif value > -5:
+        return "🟣 Close"
+    else:
+        return "🔴 Very Close Warning"
+
+pi_signal, pi_value, pi_df = get_pi_cycle_signal()
+if pi_signal is not None:
+    category = categorize_pi_cycle_value(pi_value)
+    st.markdown("### 🟣 Pi Cycle Indicator")
+    st.markdown(f"#### Pi Cycle Signal: {category} (Pi Value: {pi_value:.2f})")
+    st.markdown("### 📊 Pi Cycle Chart (Last 500 Days)")
+    st.line_chart(pi_df[["price", "111ema", "2x_350sma", "pi_value"]].tail(500).dropna())
+else:
+    st.warning("Pi Cycle data not available. Try again later.")
 
 # -------------------------------
-# Cycle Top Score Calculation
+# 5. Cycle Score Calculation
 # -------------------------------
 def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_val):
     score = 0
@@ -104,12 +169,14 @@ def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_val):
             score += pi_val * 0.1
     return int(min(score, 100))
 
-# Calculate the score and predict the cycle top
-score = calculate_cycle_score(btc_price, fear_val, gtrend_score, 60.52, pi_signal if pi_signal else False, pi_value if pi_value else 0)
+# Ensure that pi_signal and pi_value are properly initialized before passing them to the function
+pi_signal = pi_signal if pi_signal is not None else False
+pi_value = pi_value if pi_value is not None else 0
+
+score = calculate_cycle_score(btc_price, fear_val, gtrend_score, 60.52, pi_signal, pi_value)
 
 st.subheader("🧮 Cycle Top Score")
 st.markdown(f"### **{score}/100**")
-
 if score > 85:
     st.error("⚠️ High risk of cycle top — Consider caution!")
 elif score > 70:
@@ -118,9 +185,10 @@ else:
     st.success("✅ Risk moderate or low")
 
 # -------------------------------
-# Save & Show Score History
+# 6. Save & Show Score History
 # -------------------------------
 DATA_FILE = "score_history.csv"
+
 def save_score_history(score):
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
     new_entry = pd.DataFrame([[now, score]], columns=["timestamp", "score"])
@@ -142,4 +210,3 @@ else:
     st.info("No historical data yet.")
 
 st.caption("Data: CoinGecko, Alternative.me, Google Trends | Built with Streamlit")
-
