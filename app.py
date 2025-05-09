@@ -3,12 +3,10 @@ import requests
 import pandas as pd
 from datetime import datetime
 from pytrends.request import TrendReq
-import talib  # For RSI, MACD
 import time
-import numpy as np
 import os
 
-st.set_page_config(page_title="Crypto Cycle Top Indicator", layout="wide")
+st.set_page_config(page_title="🧠 Crypto Cycle Top Indicator", layout="wide")
 st.title("🧠 Crypto Cycle Top Indicator")
 st.caption("Combining sentiment, price, and on-chain signals to spot potential cycle tops")
 
@@ -19,12 +17,11 @@ st.caption("Combining sentiment, price, and on-chain signals to spot potential c
 def get_btc_price():
     url = "https://api.coingecko.com/api/v3/simple/price"
     params = {"ids": "bitcoin", "vs_currencies": "usd"}
-    headers = {"User-Agent": "Mozilla/5.0"}  # Basic header to avoid some rejections
+    headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(url, params=params, headers=headers)
     if response.status_code == 200:
         return response.json()["bitcoin"]["usd"]
     else:
-        st.error(f"🔒 Unauthorized ({response.status_code}). CoinGecko may be rejecting the request.")
         return None
 
 btc_price = get_btc_price()
@@ -67,9 +64,7 @@ def get_google_trends_score():
             return avg_score
         return None
     except Exception:
-        st.warning("⏳ Too many requests to Google Trends. Retrying...")
-        time.sleep(60)
-        return get_google_trends_score()
+        return None
 
 gtrend_score = get_google_trends_score()
 if gtrend_score:
@@ -78,59 +73,55 @@ else:
     st.warning("Google Trends data not available.")
 
 # -------------------------------
-# 4. RSI and Daily RSI Calculation
+# 4. Pi Cycle Indicator (last 365 days)
 # -------------------------------
 @st.cache_data
 def get_btc_price_history():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
     params = {"vs_currency": "usd", "days": "365"}
-    headers = {
-        "accept": "application/json"
-    }
-
+    headers = {"accept": "application/json"}
     response = requests.get(url, params=params, headers=headers)
-    if response.status_code == 200:
+    if response.status_code == 200 and "prices" in response.json():
         prices = response.json()["prices"]
         df = pd.DataFrame(prices, columns=["timestamp", "price"])
-        df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
+        df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("date", inplace=True)
-        return df
+        df["price"] = df["price"].astype(float)
+        return df[["price"]]
     return None
 
-def calculate_rsi(df):
-    df['RSI'] = talib.RSI(df['price'], timeperiod=14)
+def compute_pi_cycle(df):
+    if df is None or len(df) < 350:
+        return None
+    df["111ema"] = df["price"].ewm(span=111, adjust=False).mean()
+    df["350sma"] = df["price"].rolling(window=350).mean()
+    df["2x_350sma"] = df["350sma"] * 2
+    df["pi_signal"] = df["111ema"] > df["2x_350sma"]
+    df["pi_value"] = ((df["111ema"] - df["2x_350sma"]) / df["2x_350sma"]) * 100
+    df["pi_value"] = df["pi_value"].clip(lower=0)
     return df
 
-# -------------------------------
-# 5. MACD Calculation
-# -------------------------------
-def calculate_macd(df):
-    df['MACD'], df['MACD_Signal'], _ = talib.MACD(df['price'], fastperiod=12, slowperiod=26, signalperiod=9)
-    return df
+def get_pi_cycle_signal():
+    df = get_btc_price_history()
+    if df is not None:
+        df = compute_pi_cycle(df)
+        if df is not None:
+            latest = df.dropna().iloc[-1]
+            return latest["pi_signal"], latest["pi_value"], df
+    return None, None, None
+
+pi_signal, pi_value, pi_df = get_pi_cycle_signal()
+if pi_signal is not None:
+    st.markdown("### 🟣 Pi Cycle Indicator")
+    st.markdown(f"#### Pi Signal Active: {pi_signal} | Value: {pi_value:.2f}")
+    st.line_chart(pi_df[["price", "111ema", "2x_350sma"]].dropna().tail(300))
+else:
+    st.warning("Pi Cycle not available (only last 365 days supported).")
 
 # -------------------------------
-# 6. Power Law Oscillator Calculation
+# 5. Cycle Score Calculation
 # -------------------------------
-def power_law_oscillator(df):
-    price_changes = df['price'].pct_change().dropna()
-    exponent = 2  # Typical exponent used in Power Law analysis
-    pl_oscillator = (price_changes ** exponent).mean()
-    return pl_oscillator
-
-# -------------------------------
-# 7. Thermocap Calculation (Stock-to-Flow)
-# -------------------------------
-def get_thermocap():
-    # Get Bitcoin's supply and market cap from CoinGecko
-    supply = get_btc_supply()  # Supply data from CoinGecko
-    market_cap = get_btc_market_cap()  # Market cap data from CoinGecko
-    thermocap = market_cap / supply  # Stock-to-Flow ratio
-    return thermocap
-
-# -------------------------------
-# 8. Calculate Cycle Score
-# -------------------------------
-def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_val, rsi, macd, thermocap, plo):
+def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_val):
     score = 0
     if price:
         score += min(price / 1000, 40)
@@ -148,16 +139,25 @@ def calculate_cycle_score(price, fear, trend, dominance, pi_active, pi_val, rsi,
     if pi_val:
         if pi_val > 10:
             score += pi_val * 0.1
-    if rsi:
-        score += (rsi / 100) * 10  # Scale RSI between 0 and 100
-    if macd:
-        score += macd.mean()  # Use average MACD value
-    score += thermocap * 5  # Adjust weight
-    score += plo * 10  # Adjust weight
     return int(min(score, 100))
 
+score = calculate_cycle_score(
+    btc_price, fear_val, gtrend_score, 60.52,
+    pi_signal if pi_signal else False,
+    pi_value if pi_value else 0
+)
+
+st.subheader("🧮 Cycle Top Score")
+st.markdown(f"### **{score}/100**")
+if score > 85:
+    st.error("⚠️ High risk of cycle top — Consider caution!")
+elif score > 70:
+    st.warning("😬 Elevated risk — Monitor closely")
+else:
+    st.success("✅ Risk moderate or low")
+
 # -------------------------------
-# 9. Save & Show Score History
+# 6. Save & Show Score History
 # -------------------------------
 DATA_FILE = "score_history.csv"
 
