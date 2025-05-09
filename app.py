@@ -11,7 +11,9 @@ st.caption("Combining sentiment and price signals to help spot cycle tops")
 def get_btc_price():
     url = "https://api.coingecko.com/api/v3/simple/price"
     params = {"ids": "bitcoin", "vs_currencies": "usd"}
-    response = requests.get(url, params=params)
+    headers = {"User-Agent": "Mozilla/5.0"}
+response = requests.get(url, params=params, headers=headers)
+
     if response.status_code == 200:
         return response.json()["bitcoin"]["usd"]
     return None
